@@ -7,10 +7,7 @@
 	<UserControl.Template>
 		<ControlTemplate>
 			<ScrollViewer x:Name="PART_ScrollViewer"
-						  Offset="{TemplateBinding Offset, Mode=TwoWay}"
-						  HorizontalScrollBarVisibility="Visible"
-						  VerticalScrollBarVisibility="Visible"
-						  IsScrollInertiaEnabled="True">
+						  Offset="{TemplateBinding Offset, Mode=TwoWay}">
 				<Border x:Name="PART_MapBorder" 
 						Background="{TemplateBinding Background}"
 						Padding="{TemplateBinding Padding}">

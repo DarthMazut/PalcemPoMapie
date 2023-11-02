@@ -126,7 +126,6 @@ namespace PalcemPoMapie.Controls
             _mapImage = e.NameScope.Get<Image>("PART_MapImage");
             _mapBorder = e.NameScope.Get<Border>("PART_MapBorder");
             
-            _mapImage.PointerWheelChanged += WheelChanged;
             _mapBorder.PointerWheelChanged += WheelChanged;
         }
 
@@ -170,17 +169,15 @@ namespace PalcemPoMapie.Controls
         protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
         {
             base.OnPointerWheelChanged(e);
-            if (e.Handled is false)
+            if (!e.Handled)
             {
-                double deltaScale = e.Delta.Y switch
+                ZoomByFactor(e.Delta.Y switch
                 {
                     0 => 1,
                     > 0 => ZoomInFactor,
                     < 0 => ZoomOutFactor,
                     _ => throw new NotImplementedException(),
-                };
-
-                ZoomByFactor(deltaScale, e);
+                }, e);
             }
         }
 
