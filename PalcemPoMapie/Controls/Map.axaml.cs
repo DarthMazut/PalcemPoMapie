@@ -4,8 +4,10 @@ using Avalonia.Controls.Metadata;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
+using Avalonia.Threading;
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace PalcemPoMapie.Controls
 {
@@ -15,9 +17,17 @@ namespace PalcemPoMapie.Controls
     public partial class Map : UserControl
     {
         private Point _lastPointerPosition = new();
+        private ViewportSection _pointerSection = ViewportSection.Center;
         private ScrollViewer? _scrollViewer;
         private Border? _mapBorder;
         private Image? _mapImage;
+        private DispatcherTimer _scrollingTimer = new(DispatcherPriority.Render)
+        { 
+            Interval = TimeSpan.FromMilliseconds(1),
+        };
+
+        public static readonly StyledProperty<IBrush?> ContentBackgroundProperty =
+            AvaloniaProperty.Register<Map, IBrush?>(nameof(ContentBackground));
 
         public static readonly StyledProperty<Vector> OffsetProperty =
             AvaloniaProperty.Register<Map, Vector>(nameof(Offset));
@@ -39,6 +49,12 @@ namespace PalcemPoMapie.Controls
 
         public static readonly StyledProperty<IImage> ImageSourceProperty =
             AvaloniaProperty.Register<Map, IImage>(nameof(ImageSource));
+
+        public IBrush? ContentBackground
+        {
+            get => GetValue(ContentBackgroundProperty);
+            set => SetValue(ContentBackgroundProperty, value);
+        }
 
         public Vector Offset
         {
@@ -87,6 +103,7 @@ namespace PalcemPoMapie.Controls
         public Map()
         {
             InitializeComponent();
+            _scrollingTimer.Tick += EdgeScrolled;
         }
 
         public void ZoomToScale(double targetScale, PointerEventArgs args) => ZoomToScale(targetScale, args.GetPosition(_mapBorder));
@@ -129,7 +146,7 @@ namespace PalcemPoMapie.Controls
             _mapBorder.PointerWheelChanged += WheelChanged;
         }
 
-        protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+        protected override async void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
         {
             base.OnPropertyChanged(change);
             if (change.Property == ScaleProperty &&
@@ -161,6 +178,16 @@ namespace PalcemPoMapie.Controls
                 {
                     Pan(e);
                 }
+
+                _pointerSection = ResolveSection(e.GetPosition(_scrollViewer));
+                if (_pointerSection == ViewportSection.Center)
+                {
+                    _scrollingTimer.Stop();
+                }
+                else
+                {
+                    _scrollingTimer.Start();
+                }
             }
 
             _lastPointerPosition = e.GetPosition(_scrollViewer);
@@ -185,6 +212,24 @@ namespace PalcemPoMapie.Controls
         {
             OnPointerWheelChanged(e);
             e.Handled = true;
+        }
+
+        private void EdgeScrolled(object? sender, EventArgs e)
+        {
+            double speed = 1;
+            Offset += _pointerSection switch
+            {
+                ViewportSection.TopLeft => new Vector(-speed, -speed),
+                ViewportSection.Top => new Vector(0, -speed),
+                ViewportSection.TopRight => new Vector(speed, -speed),
+                ViewportSection.Left => new Vector(-speed, 0),
+                ViewportSection.Center => Vector.Zero,
+                ViewportSection.Right => new Vector(speed, 0),
+                ViewportSection.BottomLeft => new Vector(-speed, speed),
+                ViewportSection.Bottom => new Vector(0, speed),
+                ViewportSection.BottomRight => new Vector(speed, speed),
+                _ => throw new NotImplementedException(),
+            };
         }
 
         private double SetScaleByDelta(double deltaScale)
@@ -222,6 +267,49 @@ namespace PalcemPoMapie.Controls
             {
                 content.RenderTransform = new ScaleTransform(Scale, Scale);
             }
+        }
+
+        private ViewportSection ResolveSection(Point position)
+        {
+            double padding = 10;
+            double posX = 1;
+            double posY = 1;
+
+            if (position.X <= padding)
+            {
+                posX = 0;
+            }
+
+            if (position.X >= _scrollViewer!.Bounds.Width - padding)
+            {
+                posX = 2;
+            }
+
+            if (position.Y <=padding)
+            {
+                posY = 0;
+            }
+
+            if (position.Y >= _scrollViewer!.Bounds.Height - padding)
+            {
+                posY = 2;
+            }
+
+            return (ViewportSection)(3 * posY + posX);
+
+        }
+
+        private enum ViewportSection
+        {
+            TopLeft,
+            Top,
+            TopRight,
+            Left,
+            Center,
+            Right,
+            BottomLeft,
+            Bottom,
+            BottomRight
         }
     }
 }

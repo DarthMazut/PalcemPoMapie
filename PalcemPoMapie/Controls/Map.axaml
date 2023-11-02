@@ -7,11 +7,14 @@
 	<UserControl.Template>
 		<ControlTemplate>
 			<ScrollViewer x:Name="PART_ScrollViewer"
-						  Offset="{TemplateBinding Offset, Mode=TwoWay}">
+						  Offset="{TemplateBinding Offset, Mode=TwoWay}"
+						  HorizontalScrollBarVisibility="Hidden"
+						  VerticalScrollBarVisibility="Hidden"
+						  IsScrollInertiaEnabled="True">
 				<Border x:Name="PART_MapBorder" 
 						Background="{TemplateBinding Background}"
 						Padding="{TemplateBinding Padding}">
-					<Panel Background="LightBlue" HorizontalAlignment="Center" VerticalAlignment="Center">
+					<Panel Background="{TemplateBinding ContentBackground}" HorizontalAlignment="Center" VerticalAlignment="Center">
 						<Image x:Name="PART_MapImage" Source="{TemplateBinding ImageSource}"/>
 						<ContentControl Content="{TemplateBinding Content}"/>
 					</Panel>
