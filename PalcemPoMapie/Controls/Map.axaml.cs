@@ -21,9 +21,9 @@ namespace PalcemPoMapie.Controls
         private ScrollViewer? _scrollViewer;
         private Border? _mapBorder;
         private Image? _mapImage;
-        private DispatcherTimer _scrollingTimer = new(DispatcherPriority.Render)
+        private DispatcherTimer _scrollingTimer = new(DispatcherPriority.Normal)
         { 
-            Interval = TimeSpan.FromMilliseconds(1),
+            Interval = TimeSpan.FromMilliseconds(16),
         };
 
         public static readonly StyledProperty<IBrush?> ContentBackgroundProperty =
@@ -46,6 +46,9 @@ namespace PalcemPoMapie.Controls
 
         public static readonly StyledProperty<double> ZoomOutFactorProperty =
             AvaloniaProperty.Register<Map, double>(nameof(ZoomOutFactor), defaultValue: 0.9);
+
+        public static readonly StyledProperty<double> EdgeScrollingSpeedProperty =
+            AvaloniaProperty.Register<Map, double>(nameof(EdgeScrollingSpeed), defaultValue: 15);
 
         public static readonly StyledProperty<IImage> ImageSourceProperty =
             AvaloniaProperty.Register<Map, IImage>(nameof(ImageSource));
@@ -92,6 +95,12 @@ namespace PalcemPoMapie.Controls
             set => SetValue(ZoomOutFactorProperty, value);
         }
 
+        public double EdgeScrollingSpeed
+        {
+            get => GetValue(EdgeScrollingSpeedProperty);
+            set => SetValue(EdgeScrollingSpeedProperty, value);
+        }
+
         public IImage ImageSource
         {
             get => GetValue(ImageSourceProperty);
@@ -103,7 +112,7 @@ namespace PalcemPoMapie.Controls
         public Map()
         {
             InitializeComponent();
-            _scrollingTimer.Tick += EdgeScrolled;
+            _scrollingTimer.Tick += EdgeScrollingFrameUpdate;
         }
 
         public void ZoomToScale(double targetScale, PointerEventArgs args) => ZoomToScale(targetScale, args.GetPosition(_mapBorder));
@@ -178,19 +187,11 @@ namespace PalcemPoMapie.Controls
                 {
                     Pan(e);
                 }
-
-                _pointerSection = ResolveSection(e.GetPosition(_scrollViewer));
-                if (_pointerSection == ViewportSection.Center)
-                {
-                    _scrollingTimer.Stop();
-                }
-                else
-                {
-                    _scrollingTimer.Start();
-                }
             }
 
             _lastPointerPosition = e.GetPosition(_scrollViewer);
+            _pointerSection = ResolveSection(_lastPointerPosition);
+            ToggleScrollingTimer();
         }
 
         protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -214,20 +215,21 @@ namespace PalcemPoMapie.Controls
             e.Handled = true;
         }
 
-        private void EdgeScrolled(object? sender, EventArgs e)
+        private void EdgeScrollingFrameUpdate(object? sender, EventArgs e)
         {
-            double speed = 1;
+            // TODO: this could be exposed in event
+
             Offset += _pointerSection switch
             {
-                ViewportSection.TopLeft => new Vector(-speed, -speed),
-                ViewportSection.Top => new Vector(0, -speed),
-                ViewportSection.TopRight => new Vector(speed, -speed),
-                ViewportSection.Left => new Vector(-speed, 0),
+                ViewportSection.TopLeft => new Vector(-EdgeScrollingSpeed, -EdgeScrollingSpeed),
+                ViewportSection.Top => new Vector(0, -EdgeScrollingSpeed),
+                ViewportSection.TopRight => new Vector(EdgeScrollingSpeed, -EdgeScrollingSpeed),
+                ViewportSection.Left => new Vector(-EdgeScrollingSpeed, 0),
                 ViewportSection.Center => Vector.Zero,
-                ViewportSection.Right => new Vector(speed, 0),
-                ViewportSection.BottomLeft => new Vector(-speed, speed),
-                ViewportSection.Bottom => new Vector(0, speed),
-                ViewportSection.BottomRight => new Vector(speed, speed),
+                ViewportSection.Right => new Vector(EdgeScrollingSpeed, 0),
+                ViewportSection.BottomLeft => new Vector(-EdgeScrollingSpeed, EdgeScrollingSpeed),
+                ViewportSection.Bottom => new Vector(0, EdgeScrollingSpeed),
+                ViewportSection.BottomRight => new Vector(EdgeScrollingSpeed, EdgeScrollingSpeed),
                 _ => throw new NotImplementedException(),
             };
         }
@@ -297,6 +299,18 @@ namespace PalcemPoMapie.Controls
 
             return (ViewportSection)(3 * posY + posX);
 
+        }
+
+        private void ToggleScrollingTimer()
+        {
+            if (_pointerSection == ViewportSection.Center)
+            {
+                _scrollingTimer.Stop();
+            }
+            else
+            {
+                _scrollingTimer.Start();
+            }
         }
 
         private enum ViewportSection
