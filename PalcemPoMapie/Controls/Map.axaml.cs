@@ -1,19 +1,12 @@
 using Avalonia;
-using Avalonia.Animation;
-using Avalonia.Animation.Easings;
-using Avalonia.Collections;
 using Avalonia.Controls;
 using Avalonia.Controls.Metadata;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Media;
-using Avalonia.Rendering.Composition;
-using Avalonia.Styling;
 using Avalonia.Threading;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Threading;
 using System.Threading.Tasks;
 
 namespace PalcemPoMapie.Controls
@@ -23,18 +16,12 @@ namespace PalcemPoMapie.Controls
     [TemplatePart("PART_MapImage", typeof(Image))]
     public partial class Map : UserControl
     {
+        private Point _lastPointerPosition = new();
+        private ViewportSection _pointerSection = ViewportSection.Center;
         private ScrollViewer? _scrollViewer;
         private Border? _mapBorder;
         private Image? _mapImage;
-
-        private readonly PanningSlideData _panningSlideData = new()
-        {
-            Deceleration = 0.01 // [px / ms ^ 2]
-        };
-
-        private Point _lastPointerPosition = new();
-        private ViewportSection _pointerSection = ViewportSection.Center;
-        private DispatcherTimer _frameTimer = new(DispatcherPriority.Normal)
+        private DispatcherTimer _scrollingTimer = new(DispatcherPriority.Normal)
         { 
             Interval = TimeSpan.FromMilliseconds(16),
         };
@@ -125,7 +112,7 @@ namespace PalcemPoMapie.Controls
         public Map()
         {
             InitializeComponent();
-            _frameTimer.Tick += FrameUpdate;
+            _scrollingTimer.Tick += EdgeScrollingFrameUpdate;
         }
 
         public void ZoomToScale(double targetScale, PointerEventArgs args) => ZoomToScale(targetScale, args.GetPosition(_mapBorder));
@@ -188,30 +175,6 @@ namespace PalcemPoMapie.Controls
                     ScaleContent();
                 }
             }
-
-            if (change.Property == OffsetProperty)
-            {
-                Debug.WriteLine(Offset);
-            }
-        }
-
-        protected override void OnPointerPressed(PointerPressedEventArgs e)
-        {
-            base.OnPointerPressed(e);
-            if (e.GetCurrentPoint(_scrollViewer).Properties.IsRightButtonPressed)
-            {
-                _panningSlideData.MarkPanningStart(e.GetPosition(_scrollViewer));
-            }
-        }
-
-        protected override async void OnPointerReleased(PointerReleasedEventArgs e)
-        {
-            base.OnPointerReleased(e);
-            if (e.InitialPressMouseButton == MouseButton.Right)
-            {
-                _panningSlideData.MarkPanningEnd(e.GetPosition(_scrollViewer));
-                _frameTimer.Start();
-            }
         }
 
         protected override void OnPointerMoved(PointerEventArgs e)
@@ -227,7 +190,8 @@ namespace PalcemPoMapie.Controls
             }
 
             _lastPointerPosition = e.GetPosition(_scrollViewer);
-            UpdateViewportSectionAndFrameTimer(e);
+            _pointerSection = ResolveSection(_lastPointerPosition);
+            ToggleScrollingTimer();
         }
 
         protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
@@ -251,35 +215,23 @@ namespace PalcemPoMapie.Controls
             e.Handled = true;
         }
 
-        private void FrameUpdate(object? sender, EventArgs e)
+        private void EdgeScrollingFrameUpdate(object? sender, EventArgs e)
         {
             // TODO: this could be exposed in event
 
-            if (_panningSlideData.IsSliding)
+            Offset += _pointerSection switch
             {
-                Offset += _panningSlideData.GetSlidingDeltaVector();
-
-                if (!_panningSlideData.IsSliding)
-                {
-                    _frameTimer.Stop();
-                }
-            }
-            else
-            {
-                Offset += _pointerSection switch
-                {
-                    ViewportSection.TopLeft => new Vector(-EdgeScrollingSpeed, -EdgeScrollingSpeed),
-                    ViewportSection.Top => new Vector(0, -EdgeScrollingSpeed),
-                    ViewportSection.TopRight => new Vector(EdgeScrollingSpeed, -EdgeScrollingSpeed),
-                    ViewportSection.Left => new Vector(-EdgeScrollingSpeed, 0),
-                    ViewportSection.Center => Vector.Zero,
-                    ViewportSection.Right => new Vector(EdgeScrollingSpeed, 0),
-                    ViewportSection.BottomLeft => new Vector(-EdgeScrollingSpeed, EdgeScrollingSpeed),
-                    ViewportSection.Bottom => new Vector(0, EdgeScrollingSpeed),
-                    ViewportSection.BottomRight => new Vector(EdgeScrollingSpeed, EdgeScrollingSpeed),
-                    _ => throw new NotImplementedException(),
-                };
-            }
+                ViewportSection.TopLeft => new Vector(-EdgeScrollingSpeed, -EdgeScrollingSpeed),
+                ViewportSection.Top => new Vector(0, -EdgeScrollingSpeed),
+                ViewportSection.TopRight => new Vector(EdgeScrollingSpeed, -EdgeScrollingSpeed),
+                ViewportSection.Left => new Vector(-EdgeScrollingSpeed, 0),
+                ViewportSection.Center => Vector.Zero,
+                ViewportSection.Right => new Vector(EdgeScrollingSpeed, 0),
+                ViewportSection.BottomLeft => new Vector(-EdgeScrollingSpeed, EdgeScrollingSpeed),
+                ViewportSection.Bottom => new Vector(0, EdgeScrollingSpeed),
+                ViewportSection.BottomRight => new Vector(EdgeScrollingSpeed, EdgeScrollingSpeed),
+                _ => throw new NotImplementedException(),
+            };
         }
 
         private double SetScaleByDelta(double deltaScale)
@@ -319,26 +271,6 @@ namespace PalcemPoMapie.Controls
             }
         }
 
-        private void UpdateViewportSectionAndFrameTimer(PointerEventArgs e)
-        {
-            ViewportSection currentSection = ResolveSection(e.GetPosition(_scrollViewer));
-            if (_pointerSection != currentSection)
-            {
-                _pointerSection = currentSection;
-                if (!_panningSlideData.IsSliding && !_panningSlideData.IsPanning)
-                {
-                    if (_pointerSection is ViewportSection.Center)
-                    {
-                        _frameTimer.Stop();
-                    }
-                    else
-                    {
-                        _frameTimer.Start();
-                    }
-                }
-            }
-        }
-
         private ViewportSection ResolveSection(Point position)
         {
             double padding = 10;
@@ -355,7 +287,7 @@ namespace PalcemPoMapie.Controls
                 posX = 2;
             }
 
-            if (position.Y <= padding)
+            if (position.Y <=padding)
             {
                 posY = 0;
             }
@@ -367,6 +299,18 @@ namespace PalcemPoMapie.Controls
 
             return (ViewportSection)(3 * posY + posX);
 
+        }
+
+        private void ToggleScrollingTimer()
+        {
+            if (_pointerSection == ViewportSection.Center)
+            {
+                _scrollingTimer.Stop();
+            }
+            else
+            {
+                _scrollingTimer.Start();
+            }
         }
 
         private enum ViewportSection

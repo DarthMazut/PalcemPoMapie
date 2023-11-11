@@ -8,8 +8,8 @@
 		<ControlTemplate>
 			<ScrollViewer x:Name="PART_ScrollViewer"
 						  Offset="{TemplateBinding Offset, Mode=TwoWay}"
-						  HorizontalScrollBarVisibility="Visible"
-						  VerticalScrollBarVisibility="Visible"
+						  HorizontalScrollBarVisibility="Hidden"
+						  VerticalScrollBarVisibility="Hidden"
 						  IsScrollInertiaEnabled="True">
 				<Border x:Name="PART_MapBorder" 
 						Background="{TemplateBinding Background}"
